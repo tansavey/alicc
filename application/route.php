@@ -9,6 +9,11 @@
 // +----------------------------------------------------------------------
 // | Author: liu21st <liu21st@gmail.com>
 // +----------------------------------------------------------------------
+use think\Route;
+Route::rule('evo/oauth/public-key','api/user/publicKey'); //获取公钥
+Route::rule('oauth/extend/token','api/user/token'); //认证，获取token
+
+Route::miss('api/demo/test');
 
 return [
     //别名配置,别名只能是映射到控制器且访问时必须加上请求的方法
