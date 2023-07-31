@@ -12,6 +12,7 @@
 use think\Route;
 Route::rule('evo/oauth/public-key','api/user/publicKey'); //获取公钥
 Route::rule('oauth/extend/token','api/user/token'); //认证，获取token
+Route::rule('device/subsystem/page','api/user/subsystem'); //获取设备分页
 
 Route::miss('api/demo/test');
 
