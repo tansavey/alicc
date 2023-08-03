@@ -4,6 +4,10 @@ namespace app\admin\controller\user;
 
 use app\common\controller\Backend;
 use app\common\library\Auth;
+use app\common\library\Ems;
+use app\common\library\Sms;
+use think\Db;
+use think\Validate;
 
 /**
  * 会员管理
@@ -56,16 +60,58 @@ class User extends Backend
         return $this->view->fetch();
     }
 
-    /**
-     * 添加
-     */
     public function add()
     {
         if ($this->request->isPost()) {
-            $this->token();
+            $username = $this->request->post('username');
+            $password = $this->request->post('password', '', null);
+
+            $rule = [
+                'username'  => 'require|length:3,30',
+                'password'  => 'require|length:6,30',
+
+            ];
+
+            $msg = [
+                'username.require' => 'Username can not be empty',
+                'username.length'  => 'Username must be 3 to 30 characters',
+                'password.require' => 'Password can not be empty',
+                'password.length'  => 'Password must be 6 to 30 characters',
+
+            ];
+            $data = [
+                'username'  => $username,
+                'password'  => $password,
+            ];
+
+            $validate = new Validate($rule, $msg);
+            $result = $validate->check($data);
+            if (!$result) {
+                $this->error(__($validate->getError()), null, ['token' => $this->request->token()]);
+            }
+            $auth =new Auth();
+            $sava = $auth->register($username, $password);
+            if ($sava) {
+                $this->success();
+            } else {
+                $this->error($this->auth->getError(), null, ['token' => $this->request->token()]);
+            }
         }
-        return parent::add();
+        return $this->view->fetch();
     }
+
+
+
+//    /**
+//     * 添加
+//     */
+//    public function add()
+//    {
+//        if ($this->request->isPost()) {
+//            $this->token();
+//        }
+//        return parent::add();
+//    }
 
     /**
      * 编辑

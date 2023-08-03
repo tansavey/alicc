@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>video.js播放HLS、FLV、MP4</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/4.6.1/css/bootstrap.min.css"/>
+    <link href="https://cdn.bootcdn.net/ajax/libs/video.js/7.21.0/video-js.min.css" rel="stylesheet">
+    <style>
+        body {
+            margin: 2rem;
+        }
+
+        .videoWarp {
+            /*
+            width: 30px;
+            height: 20px;
+            */
+        }
+
+        /*进度条
+        .video-js .vjs-progress-control {
+            opacity: 1 !important;
+            margin-right:9%;
+        }
+        */
+        /*剩余时长*/
+        .video-js .vjs-remaining-time {
+            margin-right: 7%;
+        }
+
+        /*截图按钮*/
+        .screenshotBtn {
+            position: absolute;
+            top: 6px;
+            right: 54px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="row">
+
+    <div class="videoWarp col-md-4" id="videoWarp2">
+        <video id="video2" class="video-js vjs-big-play-centered vjs-fluid" controls controlslist="nodownload"
+               preload="auto" crossOrigin="Anonymous" muted="muted"></video>
+    </div>
+
+</div>
+
+<div class="row">
+
+    <div class="col-md-4" id="">
+        <h2>HLS</h2>
+    </div>
+
+</div>
+
+<script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.6.0/jquery.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/4.6.1/js/bootstrap.min.js"></script>
+
+<script src="https://cdn.bootcdn.net/ajax/libs/video.js/7.21.0/video.min.js"></script>
+<script src="https://unpkg.com/videojs-flvjs/dist/videojs-flvjs.min.js"></script>
+
+<script src="https://unpkg.com/flv.js/dist/flv.min.js"></script>
+<script src="https://www.webrtc-experiment.com/screenshot.js"></script>
+
+<script type="text/javascript">
+    let videoUrlFLV = '';
+    // let videoUrlHLS = 'https://www.yyzts.cn/dokdo_300/_definst_/dokdo_300.stream/playlist.m3u8';
+    let videoUrlHLS = '{$url}';
+
+    // let videoUrlHLS = 'https://www.yyzts.cn/dokdo_300/_definst_/dokdo_300.stream/playlist.m3u8';
+    let videoUrlmp4 = '';
+    // let videoUrlmp4 = 'http://kbs-dokdo.gscdn.com/dokdo_300/_definst_/dokdo_300.stream/playlist.m3u8';
+    let videoPlayer = null;
+
+    let token = "{$token}";
+    document.cookie = "token="+token+"; path=/";
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', videoUrlHLS);
+    xhr.withCredentials = true; // 设置 withCredentials 为 true，使得浏览器在请求中发送设置后的 cookie xhr.onreadystatechange = function() { if (xhr.readyState === 4 && xhr.status === 200) { console.log(xhr.responseText); } }; xhr.send();
+
+
+    initVideoJS('video2', 'html5', videoUrlHLS);
+
+    // 初始化Videojs插件
+    function initVideoJS(vid, vtype, vurl) {
+        let vSourceType = '';
+        if (vtype === 'flvjs') {			//flv格式
+            vSourceType = 'video/x-flv';
+        } else if ((vtype === 'html5') && (vurl.substring(vurl.lastIndexOf(".") + 1) === "m3u8")) {		//hls格式
+            vSourceType = 'application/x-mpegURL';
+        } else if ((vtype === 'html5') && (vurl.substring(vurl.lastIndexOf(".") + 1) === "mp4")) {		//mp4格式
+            vSourceType = 'video/mp4';
+        } else {		//其它格式
+            // alert('Video Type Error ...');
+        }
+        videoPlayer = videojs(vid, {
+            autoplay: true,		//自动播放
+            controls: true,		//用户可以与之交互的控件
+            loop: true,				//视频一结束就重新开始
+            muted: true,			//默认情况下将使所有音频静音
+            aspectRatio: '16:9',	//显示比率
+            disablePictureInPicture: true,		//禁用画中画
+            techOrder: [vtype],	//['HTML5',''flvjs'] 播放模式及顺序
+            preload: "auto",			//预加载
+            playsinline: true,  //解决在iPhone中播放时自动全屏问题
+            controlBar: { // 设置控制条组件
+                /* 设置控制条里面组件的相关属性及显示与否  */
+                'remainingTimeDisplay': true,
+                /* 使用children的形式可以控制每一个控件的位置，以及显示与否 */
+                children: [
+                    {name: 'playToggle'},				// 播放/暂停按钮
+                    {
+                        name: 'volumePanel',				// 音量控制
+                        inline: false,								// 竖直方式
+                    },
+                    {name: 'liveDisplay'},					//直播流时，显示LIVE
+                    {name: 'progressControl'},			// 播放进度条
+                    {name: 'remainingTimeDisplay'},	// 剩余时长
+                    {name: 'FullscreenToggle'},			// 全屏
+                ]
+            },
+            flvjs: {
+                mediaDataSource: {
+                    isLive: true,
+                    cors: true,
+                    withCredentials: false,
+                },
+            },
+            sources: [{src: vurl, type: vSourceType}],
+        }, function () {
+        });
+
+        setTimeout(() => {
+            videoPlayer.play();
+            addScreenshotBtnHandle()
+        }, 500)
+    }
+
+    //视频区域禁用右键
+    $(" #video2").bind('contextmenu', function () {
+        return false;
+    });
+
+    // 添加截图按钮
+    function addScreenshotBtnHandle(params) {
+        $('.vjs-control-bar').append("<div class='screenshotBtn'><svg t='1619515761104' class='icon' viewBox='0 0 1024 1024' version='1.1' xmlns='http://www.w3.org/2000/svg' p-id='11028' width='15' height='15'><path d='M512 384c55.6 0 107.8 21.6 147.1 60.9S720 536.4 720 592s-21.6 107.8-60.9 147.1S567.6 800 512 800s-107.8-21.6-147.1-60.9S304 647.6 304 592s21.6-107.8 60.9-147.1S456.4 384 512 384z m0-64c-150.2 0-272 121.8-272 272s121.8 272 272 272 272-121.8 272-272-121.8-272-272-272z' p-id='11029' fill='#ffffff'></path><path d='M650.9 128l4.4 23.6C666.7 212.1 719.6 256 781.1 256H896c35.3 0 64 28.7 64 64v512c0 35.3-28.7 64-64 64H128c-35.3 0-64-28.7-64-64V320c0-35.3 28.7-64 64-64h114.9c61.6 0 114.5-43.9 125.8-104.4l4.4-23.6h277.8z m39.8-64H333.3c-7.7 0-14.3 5.5-15.7 13.1l-11.8 62.7c-5.7 30.3-32.1 52.2-62.9 52.2H128C57.3 192 0 249.3 0 320v512c0 70.7 57.3 128 128 128h768c70.7 0 128-57.3 128-128V320c0-70.7-57.3-128-128-128H781.1c-30.8 0-57.2-21.9-62.9-52.2l-11.8-62.7c-1.4-7.6-8-13.1-15.7-13.1z' p-id='11030' fill='#ffffff'></path><path d='M224 352h-64c-17.7 0-32-14.3-32-32s14.3-32 32-32h64c17.7 0 32 14.3 32 32s-14.3 32-32 32zM512 560c17.6 0 32 14.4 32 32s-14.4 32-32 32-32-14.4-32-32 14.4-32 32-32z m0-64c-53 0-96 43-96 96s43 96 96 96 96-43 96-96-43-96-96-96z' p-id='11031' fill='#ffffff'></path></svg></div>")
+    }
+
+    // 截图按钮点击事件
+    $(document).on('click', '.screenshotBtn', function () {
+        const fileType = 'png';
+        // 找到需要截图的video标签
+        const video = $(this).parent().siblings("video")[0];
+        //console.log(video);
+        video.crossOrigin = "anonymous";
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);	// 图片大小和视频分辨率一致
+
+        const strDataURL = canvas.toDataURL('image/' + fileType);		 // canvas中video中取一帧图片并转成dataURL
+
+        let arr = strDataURL.split(','),
+            mime = arr[0].match(/:(.*?);/)[1],
+            bstr = atob(arr[1]),
+            n = bstr.length,
+            u8arr = new Uint8Array(n)
+        while (n--) {
+            u8arr[n] = bstr.charCodeAt(n)
+        }
+        const blob = new Blob([u8arr], {
+            type: mime
+        })
+        const url = window.URL.createObjectURL(blob);
+        downloadFile(url, 'png')
+    })
+
+    // 下载截图
+    function downloadFile(blob, fileType) {
+        const a = document.createElement('a')
+        a.style.display = 'none'
+        a.href = blob
+        const time = new Date().getTime()
+        a.download = `${time}.${fileType}`
+        document.body.appendChild(a)
+        a.click()
+        setTimeout(function () {
+            document.body.removeChild(a)
+            window.URL.revokeObjectURL(blob)
+        }, 1000)
+    }
+</script>
+</body>
+</html>

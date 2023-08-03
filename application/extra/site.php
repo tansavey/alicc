@@ -4,7 +4,7 @@ return array (
   'name' => '安里监控',
   'beian' => '',
   'cdnurl' => '',
-  'version' => '1.0.8',
+  'version' => '1.0.19',
   'timezone' => 'Asia/Shanghai',
   'forbiddenip' => '',
   'languages' => 

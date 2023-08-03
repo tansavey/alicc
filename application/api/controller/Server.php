@@ -47,14 +47,152 @@ class Server extends Controller
     /**
      *设备分页查询
      * 2023/7/31
-     * @return void
+     * @param $server_token
+     * @param $data
+     * @return mixed
      */
+
     public static function subsystem($server_token,$data)
     {
         $url = Env::get('server.ip') . '/evo-apigw/evo-brm/1.2.0/device/subsystem/page';
         $result = self::formatPost($server_token,$url, $data);
+        $result = json_decode($result, true);
         return $result;
     }
+
+    /**
+     *设备通道分页查询
+     * @param $server_token
+     * @param $data
+     * @return mixed
+     */
+    public static function channel($server_token,$data)
+    {
+        $url = Env::get('server.ip') . '/evo-apigw/evo-brm/1.2.0/device/channel/subsystem/page';
+        $result = self::formatPost($server_token,$url, $data);
+        $result = json_decode($result, true);
+        return $result;
+    }
+
+
+    /**
+     *球机控制
+     * 2023/8/2
+     * @param $server_token
+     * @param $data
+     * @return mixed
+     */
+
+    public static function OperateDirect($server_token,$data)
+    {
+        $url = Env::get('server.ip') . '/evo-apigw/admin/API/DMS/Ptz/OperateDirect';
+        $result = self::formatPost($server_token,$url, $data);
+        $result = json_decode($result, true);
+        return $result;
+    }
+
+    /**
+     *alarm事件分页查询
+     * 2023/8/2
+     * @param $server_token
+     * @param $data
+     * @return mixed
+     */
+    public static function alarmRecordPage($server_token,$data)
+    {
+        $url = Env::get('server.ip') . '/evo-apigw/evo-event/1.2.0/alarm-record/page';
+        $result = self::formatPost($server_token,$url, $data);
+        $result = json_decode($result, true);
+        return $result;
+    }
+
+
+    public static function hls($server_token,$data)
+    {
+        $url = Env::get('server.ip') . '/evo-apigw/admin/API/video/stream/realtime';
+        $result = self::formatPost($server_token,$url, $data);
+        $result = json_decode($result, true);
+        return $result;
+    }
+
+    /**
+     * 查询单个通道录像存在状态
+     */
+    public static function GetChannelMonthRecordStatus($server_token,$data){
+        $url = Env::get('server.ip') . '/evo-apigw/admin/API/SS/Record/GetChannelMonthRecordStatus';
+        $result = self::formatPost($server_token,$url, $data);
+        $result = json_decode($result, true);
+        return $result;
+    }
+
+    /**
+     *查询普通录像信息列表
+     * 2023/8/1
+     * @param $server_token
+     * @param $data
+     * @return mixed
+     */
+    public static function QueryRecords($server_token,$data){
+        $url = Env::get('server.ip') . '/evo-apigw/admin/API/SS/Record/QueryRecords';
+        $result = self::formatPost($server_token,$url, $data);
+        $result = json_decode($result, true);
+        return $result;
+    }
+
+
+    /**
+     *录像回放
+     * 2023/8/1
+     * @param $server_token
+     * @param $data
+     * @return mixed
+     */
+    public static function record($server_token,$data)
+    {
+        $url = Env::get('server.ip')  . '/evo-apigw/admin/API/video/stream/record';
+        $result = self::formatPost($server_token,$url, $data);
+        $result = json_decode($result, true);
+        return $result;
+    }
+
+
+    /**
+     *时事件订阅
+     * 2023/8/1
+     * @param $server_token
+     * @param $data
+     * @return mixed
+     */
+    public static function mqinfo($server_token,$data)
+    {
+        $url = Env::get('server.ip')  . '/evo-apigw/evo-event/1.0.0/subscribe/mqinfo';
+        $result = self::formatPost($server_token,$url, $data);
+        $result = json_decode($result, true);
+        return $result;
+    }
+
+    /**
+     *刷新token
+     * 2023/8/1
+     * @param $refresh_token
+     * @return mixed
+     */
+
+    public static function refreshToken($refresh_token)
+    {
+        $data = [
+            "grant_type" => "refresh_token",
+            "client_id" => Env::get('server.client_id'),
+            "client_secret" => Env::get('server.client_secret'),
+            "refresh_token" => $refresh_token,
+        ];
+        $url = Env::get('server.ip') . '/evo-apigw/evo-oauth/1.0.0/oauth/extend/refresh/token';
+        $data = json_encode($data, JSON_UNESCAPED_UNICODE);
+        $result = curlPost($url, $data);
+        $result = json_decode($result,true);
+        return $result;
+    }
+
 
     /**
      *封装POST请求

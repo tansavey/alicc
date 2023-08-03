@@ -74,3 +74,11 @@ if (!function_exists('getUserIP')) {
         return $ip;
     }
 }
+
+if (!function_exists('ht')) {
+    function ht($vars)
+    {
+        print_r($vars);exit;
+    }
+}
+
