@@ -15,7 +15,7 @@ class User extends Api
 {
 
     // 无需登录的接口,*表示全部
-    protected $noNeedLogin = ['publicKey', 'token', 'channel', 'hls', 'mqinfoCallback', 'mqinfo'];
+    protected $noNeedLogin = ['publicKey', 'token',"mqinfoCallback",'mqinfoCallback2'];
     // 无需鉴权的接口,*表示全部
     protected $noNeedRight = ['*'];
     //用户token
@@ -31,21 +31,23 @@ class User extends Api
             $user_token = $request->header()['token'];
             $this->user_token = $user_token;
             $server_tokenArr = cache($user_token);
+            if ($server_tokenArr) {
+                $refresh_token = Server::refreshToken($server_tokenArr['token']['refresh_token']);
+                $server_tokenArr['token']['access_token'] = $refresh_token['data']['access_token'];
+                cache($user_token, $server_tokenArr);
+                $this->server_token = cache($user_token)['token'];
+            }
+        }
+        /*本地测试*/
+        else {
+            $user_token = '3aba8094-82f6-45ec-8054-b7a67510b323';
+            $this->user_token = $user_token;
+            $server_tokenArr = cache($user_token);
             $refresh_token = Server::refreshToken($server_tokenArr['token']['refresh_token']);
             $server_tokenArr['token']['access_token'] = $refresh_token['data']['access_token'];
             cache($user_token, $server_tokenArr);
             $this->server_token = cache($user_token)['token'];
         }
-        /*本地测试*/
-//        else {
-//            $user_token = '7379aa2c-b16b-4234-8cfe-19beb04c2146';
-//            $this->user_token = $user_token;
-//            $server_tokenArr = cache($user_token);
-//            $refresh_token = Server::refreshToken($server_tokenArr['token']['refresh_token']);
-//            $server_tokenArr['token']['access_token'] = $refresh_token['data']['access_token'];
-//            cache($user_token, $server_tokenArr);
-//            $this->server_token = cache($user_token)['token'];
-//        }
         parent::__construct($request);
     }
 
@@ -60,9 +62,8 @@ class User extends Api
         $generatekey = $m2->generatekey();
         $private_key = $generatekey[0];
         $public_key = $generatekey[1];
-        cache($public_key,$private_key,3000);
-
-        $this->success(__('success'), ['publickey'=>$public_key]);
+        cache($public_key, $private_key, 3000);
+        $this->success(__('success'), ['public_key' => $public_key]);
     }
 
     /**
@@ -76,26 +77,32 @@ class User extends Api
         $data = $this->request->post();
         $client_id = $data['client_id'];
         $public_key = $data['public_key'];
-        if (cache($public_key)){
+        if (cache($public_key)) {
             $private_key = cache($public_key);
-        }else{
+        } else {
             $this->error($this->auth->getError());
         }
         $m2 = new RtSm2();
-        $client_secret = $m2->doDecrypt($data['client_secret'], $private_key);
+//        $client_secret = $m2->doEncrypt('user123', $public_key);
+//        ht($client_secret);
+
+        try {
+            $client_secret = $m2->doDecrypt($data['client_secret'], $private_key);
+        } catch (\Exception $e) {
+            $this->error(__('参数不正确'));
+        }
         if (!$client_id || !$client_secret) {
-            $this->error(__('Invalid parameters'));
+            $this->error(__('参数不正确'));
         }
         $ret = $this->auth->login($client_id, $client_secret);
         if ($ret) {
-
             /*获取服务器Token*/
             $server_public_key = Server::public_key();
             $server_token = Server::token($server_public_key);
             /*创建用户的Token*/
             $data = ['userinfo' => $this->auth->getUserinfo()];
             $user_token = $data['userinfo']['token'];
-            cache($user_token, ['token' => $server_token, 'clientIp' => getUserIP(), 'time' => time()]);
+            cache($user_token, ['token' => $server_token, 'clientIp' => getUserIP(), 'time' => time()], 7100);
             $this->success(__('Logged in successful'), [
                 'token' => $user_token
             ]);
@@ -112,9 +119,32 @@ class User extends Api
     public function subsystem()
     {
         $params = $this->request->post();
-        $params['channelTypeList'] = [1];//只能查询视频设备
+        $params['unitTypes'] = [1];//单元类型,多个
+        $params['types'] = ["1_6"];//设备小类
         $data = Server::subsystem($this->server_token, $params);
-        $this->success(__('success'), $data['data']);
+        isset($data['data']) ?: $this->error($data['desc']);
+        if (!isset($data['data'])) {
+            $this->error($data);
+        }
+        $newData = array();
+        $pageData = $data['data']['pageData'];
+        foreach ($pageData as $pageDataKey => $pageDataVo) {
+            unset($pageData[$pageDataKey]['deviceIp']);
+            unset($pageData[$pageDataKey]['loginType']);
+            unset($pageData[$pageDataKey]['loginName']);
+            unset($pageData[$pageDataKey]['loginPassword']);
+            unset($pageData[$pageDataKey]['subSystem']);
+//            $newData = $pageDataVo;
+            foreach ($pageDataVo['units'] as $unitsKey => $unitsVo) {
+                if ($unitsVo['unitType'] != 1) {
+//                    $newData[] = 11;
+                    unset($pageData[$pageDataKey]['units'][$unitsKey]);
+                }
+            }
+        }
+
+        $this->success(__('success'), $pageData);
+
     }
 
     /**
@@ -124,56 +154,27 @@ class User extends Api
      */
     public function channel()
     {
+        /*读取NVR设备*/
+        $nvrData['unitTypes'] = [1];//单元类型,多个
+        $nvrData['types'] = ["1_6"];//设备小类
+        $nvrData = Server::subsystem($this->server_token, $nvrData);
+        isset($nvrData['data']) ?: $this->error($nvrData['desc']);
+        $pageData = $nvrData['data']['pageData'];
+        $deviceCodeList = array();
+        foreach ($pageData as $pageDataKey => $pageDataVo) {
+            $deviceCode = $pageDataVo['deviceCode'];
+            $deviceCodeList[] = "$deviceCode";
+        }
+        /*开始查询*/
         $params = $this->request->post();
         $params['channelTypeList'] = [1];//只能查询视频设备
+        $params['deviceCodeList'] = $deviceCodeList;//只能查询视频设备
+        $params['types'] = ["1_6"];//设备小类
+        $params['includeSubOwnerCodeFlag'] = 1;//设备小类
         $data = Server::channel($this->server_token, $params);
+        ht($data);
+        isset($data['data']) ?: $this->error($data['desc']);
         $this->success(__('success'), $data['data']);
-    }
-
-    /**
-     *获取hls视频流
-     * 2023/7/31
-     * @return \think\response\View
-     */
-    public function hls()
-    {
-        //url
-        $user_token = '7379aa2c-b16b-4234-8cfe-19beb04c2146';
-        $this->user_token = $user_token;
-        $this->server_token = cache($user_token)['token'];
-        $params = [
-            "channelId" => "1000072$1$0$1",
-            "streamType" => "1",
-            "effectiveTime" => "3000"
-        ];
-        $params_exit['data'] = [
-            'channelId' => $params['channelId'],
-            'streamType' => $params['streamType'],
-            'type' => 'hls',
-        ];
-        $data = Server::hls($this->server_token, $params_exit);
-        $url = $data['data']['url'];
-        $url = $this->hlsToken($url, $params['effectiveTime']);
-
-        return view('hls2', [
-            'url' => $url,
-            'token' => $this->user_token
-        ]);
-
-        //post
-        $params = $this->request->post();
-        $params_exit['data'] = [
-            'channelId' => $params['channelId'],
-            'streamType' => $params['streamType'],
-            'type' => 'hls',
-        ];
-        $data = Server::hls($this->server_token, $params_exit);
-        $url = $data['data']['url'];
-        $url = $this->hlsToken($url, $params['effectiveTime']);
-        $this->success(__('success'), [
-            'url' => $url,
-            'token' => $this->user_token
-        ]);
     }
 
     /**
@@ -186,6 +187,7 @@ class User extends Api
         $params = $this->request->post();
         $params_exit['data'] = $params;
         $data = Server::GetChannelMonthRecordStatus($this->server_token, $params_exit);
+        isset($data['data']) ?: $this->error($data['desc']);
         $this->success(__('success'), $data['data']);
     }
 
@@ -199,7 +201,54 @@ class User extends Api
         $params = $this->request->post();
         $params_exit['data'] = $params;
         $data = Server::QueryRecords($this->server_token, $params_exit);
+        isset($data['data']) ?: $this->error($data['desc']);
         $this->success(__('success'), $data['data']);
+    }
+
+    /**
+     *实时预览
+     * 2023/7/31
+     * @return \think\response\View
+     */
+    public function hls()
+    {
+        //url
+//        $user_token = '7379aa2c-b16b-4234-8cfe-19beb04c2146';
+//        $this->user_token = $user_token;
+//        $this->server_token = cache($user_token)['token'];
+//        $params = [
+//            "channelId" => "1000072$1$0$1",
+//            "streamType" => "1",
+//            "effectiveTime" => "3000"
+//        ];
+//        $params_exit['data'] = [
+//            'channelId' => $params['channelId'],
+//            'streamType' => $params['streamType'],
+//            'type' => 'hls',
+//        ];
+//        $data = Server::hls($this->server_token, $params_exit);
+//        $url = $data['data']['url'];
+//        $url = $this->hlsToken($url, $params['effectiveTime']);
+//
+//        return view('hls2', [
+//            'url' => $url,
+//            'token' => $this->user_token
+//        ]);
+
+        //post
+        $params = $this->request->post();
+        $params_exit['data'] = [
+            'channelId' => $params['channelId'],
+            'streamType' => $params['streamType'],
+            'type' => 'hls',
+        ];
+        $data = Server::hls($this->server_token, $params_exit);
+        isset($data['data']) ?: $this->error($data['desc']);
+        $url = $data['data']['url'];
+        $url = $this->hlsToken($url, $params['effectiveTime']);
+        $this->success(__('success'), [
+            'url' => $url,
+        ]);
     }
 
     /**
@@ -252,11 +301,11 @@ class User extends Api
             'type' => 'hls',
         ];
         $data = Server::record($this->server_token, $params_exit);
+        isset($data['data']) ?: $this->error($data['desc']);
         $url = $data['data']['url'];
         $url = $this->hlsToken($url, 120);
         $this->success(__('success'), [
             'url' => $url,
-            'token' => $this->user_token
         ]);
     }
 
@@ -270,44 +319,53 @@ class User extends Api
         $params = $this->request->post();
         $params['data'] = $params;
         $data = Server::OperateDirect($this->server_token, $params);
-        ht($data);
+        isset($data['data']) ?: $this->error($data['desc']);
         $this->success(__('success'), $data['data']);
     }
 
+
     /**
-     *事件订阅，订阅成功后可以接收来自平台端监控报警推送
-     * 2023/8/1
+     *报警事件分页查询
+     * 2023/8/2
      * @return void
      */
-    public function mqinfo()
+    public function alarmRecordPage()
     {
-        $data = '{
-            "param": {
-                "monitors": [
-                    {
-                        "monitor": "http://192.168.6.113:8090/api/user/mqinfoCallback",
-                        "monitorType": "url",
-                        "events": [
-                            {
-                                "category": "alarm",
-                                "subscribeAll": 1,
-                                "domainSubscribe": 2
-                            }
-                        ]
-                    }
-                ],
-                "subsystem": {
-                    "subsystemType": 0,
-                    "name": "192.168.6.113_8090",
-                    "magic": "192.168.6.113_8090"
-                }
-            }
-        }';
-        $data = json_decode($data, true);
-        $data = Server::mqinfo($this->server_token, $data);
-        halt($data);
-        $data = $data['data'];
-        $this->success(__('success'), $data);
+        /*读取NVR设备*/
+        $nvrData['unitTypes'] = [1];//单元类型,多个
+        $nvrData['types'] = ["1_6"];//设备小类
+        $nvrData = Server::subsystem($this->server_token, $nvrData);
+        isset($nvrData['data']) ?: $this->error($nvrData['desc']);
+        $pageData = $nvrData['data']['pageData'];
+        $deviceCodeList = array();
+        foreach ($pageData as $pageDataKey => $pageDataVo) {
+            $deviceCode = $pageDataVo['deviceCode'];
+            $deviceCodeList[] = "$deviceCode";
+        }
+
+        /*开始查询*/
+        $params = $this->request->post();
+//        $params['nodeCodeList'] =$deviceCodeList;
+//        $params['orgCodeList'] =["NVR1"];
+//        $params['alarmTypeList'] = [1,4,13,16,311,312,313,314,564,587,881,4303,4306,4316,4322,15591,15591,15653,15780,15653];
+        $params['sort'] = "alarmDate";
+        $params['sortType'] = "DESC";
+        $params['orgCodeList'] = ["001001"];
+
+        $data = Server::alarmRecordPage($this->server_token, $params);
+        isset($nvrData['data']) ?: $this->error($nvrData['desc']);
+        /*数据修正*/
+        $pageData = $data['data']['pageData'];
+        foreach ($pageData as $pageDataKey => $pageDataVo) {
+            unset($pageData[$pageDataKey]['alarmWebUrl']);
+            unset($pageData[$pageDataKey]['alarmAppUrl']);
+            unset($pageData[$pageDataKey]['taskWebUrl']);
+            unset($pageData[$pageDataKey]['taskAppUrl']);
+            unset($pageData[$pageDataKey]['subSystem']);
+        }
+        $this->success(__('success'), [
+            'pageData' => $pageData
+        ]);
     }
 
     /**
@@ -315,93 +373,19 @@ class User extends Api
      * 2023/8/2
      * @return void
      */
-    public function statistical()
+    public function count()
     {
         $params = $this->request->post();
-        $params = [
-            "pageNum" => 1,
-            "pageSize" => 10,
-//            "nodeCodeList" => ["1000072"],
-        ];
-        $data = Server::alarmRecordPage($this->server_token, $params);
-        ht($data);
-        $newData = array();
-
-    }
-
-
-    public function statistical3()
-    {
-        $params = $this->request->post();
-        $params['channelTypeList'] = [1];//只能查询视频设备
-        $data = Server::channel($this->server_token, $params);
-        $data = $data['data']['pageData'];
-        $newData = array();
-        foreach ($data as $dataKey => $dataVo) {
-            $isData = array();
-            $isData['deviceCode'] = $dataVo['deviceCode'];//通道编号
-            $isData['channelSeq'] = $dataVo['channelSeq'];//通道序号
-            $isData['channelCode'] = $dataVo['channelCode'];//通道编码
-            $isData['channelName'] = $dataVo['channelName'];//通道名称
-            $isData['isOnline'] = $dataVo['isOnline'];//设备通道在线状态
-            $isData['stat'] = $dataVo['stat'];//状态 0:关闭 1:开启
-            $isData['deviceCode'] = $dataVo['deviceCode'];
-            $newData[] = $isData;
-        }
-
-        ht($data);
-    }
-
-    public function statistical2()
-    {
-        $params = $this->request->post();
-        $params['unitTypes'] = [1];//单元类型 视频通道
-        $params['categorys'] = [1];//设备大类 编码设备
-        $params['types'] = ["1_2"];//设备小类 	IPC
-        $data = Server::subsystem($this->server_token, $params);
-        $data = $data['data']['pageData'];
-        $newData = array();
-        foreach ($data as $dataKey => $dataVo) {
-            ht($dataVo);
-            $deviceCode = $dataVo['deviceCode'];//设备编码
-            $deviceName = $dataVo['deviceName'];//设备名称
-            $deviceModel = $dataVo['deviceModel'];//设备型号
-            $gpsX = $dataVo['gpsX'];//经度
-            $gpsY = $dataVo['gpsY'];//经度
-            foreach ($dataVo['units'] as $units) {
-                foreach ($units['channels'] as $channels) {
-                    if (isset($channels['cameraType']) && $channels['cameraType'] == 1) {
-                        $is_data = array();
-                        $is_data['deviceCode'] = $deviceCode;
-                        $is_data['deviceName'] = $deviceName;
-                        $is_data['deviceModel'] = $deviceModel;
-                        $is_data['gpsX'] = $gpsX;
-                        $is_data['gpsY'] = $gpsY;
-                        $is_data['channelCode'] = $channels['channelCode'];//通道编码
-                        $is_data['channelName'] = $channels['channelName'];//通道名称
-                        $is_data['stat'] = $channels['stat'];//通道编码
-                        $is_data['isOnline'] = $channels['isOnline'];//设备在线状态
-                        $newData[] = $is_data;
-                    }
-                }
-            }
-        }
-
-        ht($newData);
-        halt($data);
-    }
-
-    /**
-     *alarm事件分页查询
-     * 2023/8/2
-     * @return void
-     */
-    public function alarmRecordPage()
-    {
-        $params = $this->request->post();
-        $data = Server::alarmRecordPage($this->server_token, $params);
+        $params['dbType'] = 0;
+        $params['orgCodeList'] = ["001001"];
+        $data = Server::count($this->server_token, $params);
+        isset($data['data']) ?: $this->error($data['desc']);
         $this->success(__('success'), $data['data']);
+
     }
+
+
+
 
     /**
      *路由转换、添加pk随机字符串、设置过期时间
@@ -519,6 +503,46 @@ class User extends Api
     }
 
     /**
+     *事件订阅，订阅成功后可以接收来自平台端监控报警推送
+     * 2023/8/1
+     * @return void
+     */
+    public function mqinfo()
+    {
+        $data = '{
+            "param": {
+                "monitors": [
+                    {
+                        "monitor": "http://192.168.6.113:8090/api/user/mqinfoCallback",
+                        "monitorType": "url",
+                        "events": [
+                            {
+                                "category": "alarm",
+                                "subscribeAll": 1,
+                                "domainSubscribe": 2,
+                                "authorities":[
+                                    {
+                                    "orgs":["001001"]
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ],
+                "subsystem": {
+                    "subsystemType": 0,
+                    "name": "192.168.6.113_8090",
+                    "magic": "192.168.6.113_8090"
+                }
+            }
+        }';
+        $data = json_decode($data, true);
+        $data = Server::mqinfo($this->server_token, $data);
+        $data = $data['data'];
+        $this->success(__('success'), $data);
+    }
+
+    /**
      *事件会调地址
      * 2023/8/1
      * @return void
@@ -531,5 +555,55 @@ class User extends Api
         $txt = json_encode($params, JSON_UNESCAPED_UNICODE);
         fwrite($file, $txt);
         fclose($file);
+
+        $header = [
+            "Content-Type:application/json",
+        ];
+        $url = 'http://192.168.6.113:8090/api/user/mqinfoCallback2';
+        $data = json_encode($params['info'], JSON_UNESCAPED_UNICODE);
+        $result = curlPost($url, $data, $header);
+        $filename = "E:\phpstudy_pro\WWW\www.alicc.loca\public/test/" . date("Y-m-d hisa") . "-2.txt";
+        $file = fopen($filename, "w") or die("Unable to open file!");
+        fwrite($file, $result?:0);
+        fclose($file);
+    }
+
+    public function mqinfoCallback2()
+    {
+        $filename = "E:\phpstudy_pro\WWW\www.alicc.loca\public/test/" . date("Y-m-d hisa") . "333.txt";
+        $file = fopen($filename, "w") or die("Unable to open file!");
+        $params = $this->request->post();
+        $txt = json_encode($params, JSON_UNESCAPED_UNICODE);
+        fwrite($file, $txt);
+        fclose($file);
+        return 'success';
+    }
+
+    /**
+     *事件订阅查询
+     * 2023/8/1
+     * @return void
+     */
+    public function subscribeList()
+    {
+        $url = $this->request->url();
+        $urlc = substr($url,strripos($url,"?"));//后面
+        $data = Server::subscribeList($urlc);
+        isset($data['data']) ?: $this->error($data['desc']);
+        $this->success(__('success'), $data['data']);
+    }
+
+    /**
+     *取消订阅查询
+     * 2023/8/1
+     * @return void
+     */
+    public function subscribe()
+    {
+        $params = $this->request->post();
+        $params['data'] = $params;
+        $data = Server::subscribe($this->server_token, $params);
+        isset($data['data']) ?: $this->error($data['desc']);
+        $this->success(__('success'), $data['data']);
     }
 }

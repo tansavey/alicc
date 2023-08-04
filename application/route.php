@@ -21,7 +21,7 @@ Route::rule('video/stream/record','api/user/record'); //获取hls视频流
 Route::rule('evo-event/subscribe/mqinfo','api/user/mqinfo'); //时间订阅
 Route::rule('DMS/Ptz/OperateDirect','api/user/OperateDirect'); //球机控制
 Route::rule('alarm/record/page','api/user/alarmRecordPage'); //alarm事件分页查询
-Route::rule('statistical/equipment/alarm','api/user/statistical'); //alarm事件分页查询
+Route::rule('alarm/record/count','api/user/count'); //alarm事件分页查询
 
 /*实时预览*/
 Route::rule('live/cameraid/:cameraid/substream/:m3u8','api/user/hlsRedirect');

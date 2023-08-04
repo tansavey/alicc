@@ -106,6 +106,20 @@ class Server extends Controller
         return $result;
     }
 
+    /**
+     *alarm事件分页查询
+     * 2023/8/2
+     * @param $server_token
+     * @param $data
+     * @return mixed
+     */
+    public static function count($server_token,$data)
+    {
+        $url = Env::get('server.ip') . '/evo-apigw/evo-event/1.0.0/alarm-record/count-num';
+        $result = self::formatPost($server_token,$url, $data);
+        $result = json_decode($result, true);
+        return $result;
+    }
 
     public static function hls($server_token,$data)
     {
@@ -157,7 +171,7 @@ class Server extends Controller
 
 
     /**
-     *时事件订阅
+     *事件订阅
      * 2023/8/1
      * @param $server_token
      * @param $data
@@ -242,6 +256,25 @@ class Server extends Controller
             echo "加密失败,请检查RSA秘钥";
         }
         return base64_encode($crypted);
+    }
+
+
+    /*事件订阅查询*/
+    public static function subscribeList($data)
+    {
+        $url = Env::get('server.ip')  . '/evo-apigw/evo-event/1.0.0/subscribe/subscribe-list'.$data;
+//        ht($url);
+        $result = curlGet($url);
+        $result = json_decode($result, true);
+        return $result;
+    }
+    /*取消订阅查询*/
+    public static function subscribe($server_token,$data)
+    {
+        $url = Env::get('server.ip')  . '/evo-apigw/evo-event/1.0.0/subscribe/mqinfo?name=10.33.75.97_8918';
+        $result = self::formatPost($server_token,$url, $data);
+        $result = json_decode($result, true);
+        return $result;
     }
 
 }
